@@ -61,6 +61,7 @@ model User {
   performance_score Float?  @db.DoublePrecision
   potential_score   Float?  @db.DoublePrecision
 
+  manager_id    String? @db.Uuid
   department_id String? @db.Uuid
   job_info_id   String? @db.Uuid
 
@@ -68,6 +69,8 @@ model User {
   updated_at DateTime @updatedAt
 
   tenant       Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  manager      User?           @relation("ManagerHierarchy", fields: [manager_id], references: [id], onDelete: SetNull)
+  direct_reports User[]        @relation("ManagerHierarchy")
   department   Department?     @relation(fields: [department_id], references: [id])
   job_info     JobInformation? @relation(fields: [job_info_id], references: [id])
 
@@ -80,6 +83,7 @@ model User {
   @@unique([tenant_id, email])
   @@index([tenant_id])
   @@index([deleted_at])
+  @@index([manager_id])
   @@map("users")
 }
 

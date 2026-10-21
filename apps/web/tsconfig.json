@@ -2,19 +2,43 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "jsx": "preserve",
     "module": "esnext",
     "moduleResolution": "bundler",
     "noEmit": true,
     "incremental": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@talentgo/shared": ["../../packages/shared/src"],
-      "@talentgo/shared/*": ["../../packages/shared/src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@talentgo/shared": [
+        "../../packages/shared/src"
+      ],
+      "@talentgo/shared/*": [
+        "../../packages/shared/src/*"
+      ]
     },
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "allowJs": true
   },
-  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
