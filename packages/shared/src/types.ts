@@ -31,6 +31,7 @@ export interface User {
   is_anonymized: boolean;
   performance_score: number | null;
   potential_score: number | null;
+  manager_id: string | null;
   department_id: string | null;
   job_info_id: string | null;
   created_at: string;
