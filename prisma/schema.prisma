@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── MULTI-TENANT CORE ─────────────────────────────────────────────
+
+model Tenant {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  slug       String   @unique
+  domain     String?  @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Module provisioning flags (SuccessFactors suite mapping)
+  is_ec_active   Boolean @default(false) // Employee Central
+  is_pmgm_active Boolean @default(false) // Performance & Goal Management
+  is_sdm_active  Boolean @default(false) // Succession & Development Management
+  is_rcm_active  Boolean @default(false) // Recruiting Management
+  is_lms_active  Boolean @default(false) // Learning Management (Moodle bridge)
+  is_onb_active  Boolean @default(false) // Onboarding 2.0
+  is_comp_active Boolean @default(false) // Compensation Management
+  is_wfa_active  Boolean @default(false) // Workforce Analytics
+  is_wfp_active  Boolean @default(false) // Workforce Planning
+  is_tme_active  Boolean @default(false) // Time Management
+
+  users            User[]
+  departments      Department[]
+  job_informations JobInformation[]
+  performance_goals PerformanceGoal[]
+  continuous_feedbacks ContinuousFeedback[]
+  talent_pools     TalentPool[]
+  succession_plans SuccessionPlan[]
+
+  @@map("tenants")
+}
+
+// ─── CORE HR: BIZX / EMPLOYEE CENTRAL ──────────────────────────────
+
+model User {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  auth_uid   String?  @unique @db.Uuid
+  email      String
+  first_name String
+  last_name  String
+  employee_id String?
+  hire_date  DateTime?
+  status     EmployeeStatus @default(ACTIVE)
+
+  // REGLA ARCO: soft-delete + anonymization for GDPR/audit trails
+  deleted_at     DateTime?
+  is_anonymized  Boolean  @default(false)
+
+  // 9-Box matrix fields (Talent & SDM)
+  performance_score Float?  @db.DoublePrecision
+  potential_score   Float?  @db.DoublePrecision
+
+  department_id String? @db.Uuid
+  job_info_id   String? @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant       Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  department   Department?     @relation(fields: [department_id], references: [id])
+  job_info     JobInformation? @relation(fields: [job_info_id], references: [id])
+
+  authored_feedbacks  ContinuousFeedback[] @relation("FeedbackAuthor")
+  received_feedbacks  ContinuousFeedback[] @relation("FeedbackSubject")
+  owned_goals         PerformanceGoal[]
+  talent_pool_entries TalentPoolEntry[]
+  succession_nominees SuccessionNominee[]
+
+  @@unique([tenant_id, email])
+  @@index([tenant_id])
+  @@index([deleted_at])
+  @@map("users")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+model Department {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id String  @db.Uuid
+  name      String
+  code      String?
+  parent_id String? @db.Uuid
+  cost_center String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  parent   Department? @relation("DeptHierarchy", fields: [parent_id], references: [id])
+  children Department[] @relation("DeptHierarchy")
+  users    User[]
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("departments")
+}
+
+model JobInformation {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String @db.Uuid
+  title       String
+  job_code    String?
+  job_family  String?
+  grade       String?
+  pay_band    String?
+  salary_min  Float? @db.DoublePrecision
+  salary_max  Float? @db.DoublePrecision
+
+  effective_date DateTime @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenant_id, job_code])
+  @@index([tenant_id])
+  @@map("job_informations")
+}
+
+// ─── TALENT: PERFORMANCE & GOAL MANAGEMENT (PMGM) ──────────────────
+
+model PerformanceGoal {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  user_id    String   @db.Uuid
+  title      String
+  description String?
+  metric     String?
+  target_value Float?  @db.DoublePrecision
+  actual_value Float?  @db.DoublePrecision
+  weight     Float?   @db.DoublePrecision
+  status     GoalStatus @default(ON_TRACK)
+  period_start DateTime
+  period_end   DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([user_id])
+  @@map("performance_goals")
+}
+
+enum GoalStatus {
+  NOT_STARTED
+  ON_TRACK
+  AT_RISK
+  COMPLETED
+  CANCELLED
+}
+
+model ContinuousFeedback {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  author_id  String   @db.Uuid
+  subject_id String   @db.Uuid
+  content    String
+  visibility FeedbackVisibility @default(PRIVATE)
+  category   FeedbackCategory   @default(GENERAL)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant  Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  author  User   @relation("FeedbackAuthor", fields: [author_id], references: [id], onDelete: Cascade)
+  subject User   @relation("FeedbackSubject", fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([author_id])
+  @@index([subject_id])
+  @@map("continuous_feedbacks")
+}
+
+enum FeedbackVisibility {
+  PRIVATE
+  MANAGER_ONLY
+  PUBLIC
+}
+
+enum FeedbackCategory {
+  GENERAL
+  RECOGNITION
+  COACHING
+  DEVELOPMENT
+}
+
+// ─── TALENT: SUCCESSION & DEVELOPMENT MANAGEMENT (SDM) ─────────────
+
+model TalentPool {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id String @db.Uuid
+  name      String
+  description String?
+  pool_type TalentPoolType @default(LEADERSHIP)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant  Tenant            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  entries TalentPoolEntry[]
+
+  @@index([tenant_id])
+  @@map("talent_pools")
+}
+
+enum TalentPoolType {
+  LEADERSHIP
+  HIGH_POTENTIAL
+  CRITICAL_ROLE
+  EMERGING_TALENT
+  CUSTOM
+}
+
+model TalentPoolEntry {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  talent_pool_id String   @db.Uuid
+  user_id        String   @db.Uuid
+  readiness      ReadinessLevel @default(NOT_READY)
+  notes          String?
+
+  added_at   DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  talent_pool TalentPool @relation(fields: [talent_pool_id], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([talent_pool_id, user_id])
+  @@map("talent_pool_entries")
+}
+
+enum ReadinessLevel {
+  READY_NOW
+  READY_1_YEAR
+  READY_2_YEARS
+  NOT_READY
+}
+
+model SuccessionPlan {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String @db.Uuid
+  position_title String
+  department     String?
+  criticality    PlanCriticality @default(MEDIUM)
+  status         PlanStatus      @default(DRAFT)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant   Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  nominees SuccessionNominee[]
+
+  @@index([tenant_id])
+  @@map("succession_plans")
+}
+
+enum PlanCriticality {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model SuccessionNominee {
+  id                 String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  succession_plan_id String @db.Uuid
+  user_id            String @db.Uuid
+  readiness          ReadinessLevel @default(NOT_READY)
+  ranking            Int?
+  notes              String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  succession_plan SuccessionPlan @relation(fields: [succession_plan_id], references: [id], onDelete: Cascade)
+  user            User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([succession_plan_id, user_id])
+  @@map("succession_nominees")
+}
