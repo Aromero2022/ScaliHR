@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "TalentGo",
+    "slug": "talentgo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "talentgo",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.talentgo.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.talentgo.mobile"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
+  }
+}

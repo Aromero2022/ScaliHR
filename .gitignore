@@ -6,3 +6,14 @@ dist/
 *.log
 .prisma/
 prisma.config.ts
+.turbo/
+.expo/
+android/
+ios/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/

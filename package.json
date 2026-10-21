@@ -1,24 +1,26 @@
 {
   "name": "talentgo",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:web": "turbo dev --filter=@talentgo/web",
+    "dev:mobile": "turbo dev --filter=@talentgo/mobile",
+    "db:generate": "turbo db:generate"
   },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "npm@10.9.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Aromero2022/TalentGo.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/Aromero2022/TalentGo/issues"
-  },
-  "homepage": "https://github.com/Aromero2022/TalentGo#readme",
-  "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "prisma": "^6.19.3"
   }
 }

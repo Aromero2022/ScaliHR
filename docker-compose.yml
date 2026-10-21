@@ -5,7 +5,7 @@ services:
   nextjs:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/web/Dockerfile
     ports:
       - "3000:3000"
     environment:
