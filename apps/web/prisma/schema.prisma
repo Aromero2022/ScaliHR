@@ -43,6 +43,14 @@ model Tenant {
   talent_pools         TalentPool[]
   succession_plans     SuccessionPlan[]
 
+  // RBP & Admin Center
+  permission_groups     PermissionGroup[]
+  permission_roles      PermissionRole[]
+  role_permissions      RolePermission[]
+  role_assignments      RoleAssignment[]
+  system_configurations SystemConfiguration[]
+  audit_logs            AuditLog[]
+
   @@map("tenants")
 }
 
@@ -85,6 +93,7 @@ model User {
   owned_goals         PerformanceGoal[]
   talent_pool_entries TalentPoolEntry[]
   succession_nominees SuccessionNominee[]
+  audit_logs          AuditLog[]
 
   @@unique([tenant_id, email])
   @@index([tenant_id])
@@ -450,4 +459,118 @@ model SuccessionNominee {
 
   @@unique([succession_plan_id, user_id])
   @@map("succession_nominees")
+}
+
+// ─── ROLE-BASED PERMISSIONS (RBP) ──────────────────────────────────
+
+model PermissionGroup {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String @db.Uuid
+  name          String
+  description   String?
+  criteria_json Json?  @db.JsonB
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant               Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  granted_assignments  RoleAssignment[] @relation("GrantedGroup")
+  target_assignments   RoleAssignment[] @relation("TargetPopulation")
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@map("permission_groups")
+}
+
+model PermissionRole {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String  @db.Uuid
+  name          String
+  description   String?
+  is_admin_role Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role_permissions RolePermission[]
+  role_assignments RoleAssignment[]
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@map("permission_roles")
+}
+
+model RolePermission {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String @db.Uuid
+  role_id         String @db.Uuid
+  permission_name String
+
+  created_at DateTime @default(now())
+
+  tenant Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role   PermissionRole @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, permission_name])
+  @@index([tenant_id])
+  @@index([role_id])
+  @@map("role_permissions")
+}
+
+model RoleAssignment {
+  id                         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                  String @db.Uuid
+  role_id                    String @db.Uuid
+  granted_group_id           String @db.Uuid
+  target_population_group_id String @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant           Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role             PermissionRole  @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  granted_group    PermissionGroup @relation("GrantedGroup", fields: [granted_group_id], references: [id], onDelete: Cascade)
+  target_population PermissionGroup @relation("TargetPopulation", fields: [target_population_group_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([role_id])
+  @@map("role_assignments")
+}
+
+// ─── ADMIN CENTER / PLATFORM ───────────────────────────────────────
+
+model SystemConfiguration {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id String @db.Uuid
+  key       String
+  value_json Json  @db.JsonB
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, key])
+  @@index([tenant_id])
+  @@map("system_configurations")
+}
+
+model AuditLog {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id    String @db.Uuid
+  user_id      String @db.Uuid
+  action       String
+  details_json Json?  @db.JsonB
+
+  created_at DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([user_id])
+  @@index([action])
+  @@index([created_at])
+  @@map("audit_logs")
 }
