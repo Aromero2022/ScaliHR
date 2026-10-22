@@ -29,13 +29,19 @@ model Tenant {
   is_wfp_active  Boolean @default(false) // Workforce Planning
   is_tme_active  Boolean @default(false) // Time Management
 
-  users            User[]
-  departments      Department[]
-  job_informations JobInformation[]
-  performance_goals PerformanceGoal[]
+  users                User[]
+  departments          Department[]
+  job_families         JobFamily[]
+  job_roles            JobRole[]
+  job_classifications  JobClassification[]
+  positions            Position[]
+  job_informations     JobInformation[]
+  object_definitions   ObjectDefinition[]
+  business_rules       BusinessRule[]
+  performance_goals    PerformanceGoal[]
   continuous_feedbacks ContinuousFeedback[]
-  talent_pools     TalentPool[]
-  succession_plans SuccessionPlan[]
+  talent_pools         TalentPool[]
+  succession_plans     SuccessionPlan[]
 
   @@map("tenants")
 }
@@ -61,7 +67,8 @@ model User {
   performance_score Float?  @db.DoublePrecision
   potential_score   Float?  @db.DoublePrecision
 
-  manager_id    String? @db.Uuid
+  // Position Management: hierarchy flows through Position.parent_position_id
+  position_id   String? @db.Uuid
   department_id String? @db.Uuid
   job_info_id   String? @db.Uuid
 
@@ -69,8 +76,7 @@ model User {
   updated_at DateTime @updatedAt
 
   tenant       Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  manager      User?           @relation("ManagerHierarchy", fields: [manager_id], references: [id], onDelete: SetNull)
-  direct_reports User[]        @relation("ManagerHierarchy")
+  position     Position?       @relation(fields: [position_id], references: [id], onDelete: SetNull)
   department   Department?     @relation(fields: [department_id], references: [id])
   job_info     JobInformation? @relation(fields: [job_info_id], references: [id])
 
@@ -83,7 +89,7 @@ model User {
   @@unique([tenant_id, email])
   @@index([tenant_id])
   @@index([deleted_at])
-  @@index([manager_id])
+  @@index([position_id])
   @@map("users")
 }
 
@@ -105,37 +111,175 @@ model Department {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  tenant   Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  parent   Department? @relation("DeptHierarchy", fields: [parent_id], references: [id])
-  children Department[] @relation("DeptHierarchy")
-  users    User[]
+  tenant    Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  parent    Department? @relation("DeptHierarchy", fields: [parent_id], references: [id])
+  children  Department[] @relation("DeptHierarchy")
+  users     User[]
+  positions Position[]
 
   @@unique([tenant_id, code])
   @@index([tenant_id])
   @@map("departments")
 }
 
-model JobInformation {
+// ─── EC FOUNDATION OBJECTS (Job Profile Builder) ───────────────────
+
+model JobFamily {
   id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id   String @db.Uuid
+  family_code String
+  name        String
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_roles JobRole[]
+
+  @@unique([tenant_id, family_code])
+  @@index([tenant_id])
+  @@map("job_families")
+}
+
+model JobRole {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String @db.Uuid
+  role_code     String
+  name          String
+  job_family_id String @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant              Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_family          JobFamily           @relation(fields: [job_family_id], references: [id], onDelete: Cascade)
+  job_classifications JobClassification[]
+
+  @@unique([tenant_id, role_code])
+  @@index([tenant_id])
+  @@index([job_family_id])
+  @@map("job_roles")
+}
+
+model JobClassification {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String @db.Uuid
+  job_code    String
   title       String
-  job_code    String?
-  job_family  String?
-  grade       String?
-  pay_band    String?
-  salary_min  Float? @db.DoublePrecision
-  salary_max  Float? @db.DoublePrecision
+  pay_grade   String?
+  job_role_id String  @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_role         JobRole          @relation(fields: [job_role_id], references: [id], onDelete: Cascade)
+  positions        Position[]
+  job_informations JobInformation[]
+
+  @@unique([tenant_id, job_code])
+  @@index([tenant_id])
+  @@index([job_role_id])
+  @@map("job_classifications")
+}
+
+// ─── POSITION MANAGEMENT ───────────────────────────────────────────
+
+model Position {
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String  @db.Uuid
+  position_code         String
+  title                 String
+  fte                   Float   @default(1.0) @db.DoublePrecision
+  is_vacant             Boolean @default(true)
+  department_id         String? @db.Uuid
+  job_classification_id String? @db.Uuid
+  parent_position_id    String? @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant             Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  department         Department?        @relation(fields: [department_id], references: [id])
+  job_classification JobClassification? @relation(fields: [job_classification_id], references: [id])
+  parent_position    Position?          @relation("PositionHierarchy", fields: [parent_position_id], references: [id], onDelete: SetNull)
+  child_positions    Position[]         @relation("PositionHierarchy")
+  occupants          User[]
+  job_informations   JobInformation[]
+
+  @@unique([tenant_id, position_code])
+  @@index([tenant_id])
+  @@index([parent_position_id])
+  @@index([department_id])
+  @@map("positions")
+}
+
+// ─── JOB INFORMATION (refactored: position-based) ──────────────────
+
+model JobInformation {
+  id                    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String @db.Uuid
+  title                 String
+  position_id           String? @db.Uuid
+  job_classification_id String? @db.Uuid
+  grade                 String?
+  pay_band              String?
+  salary_min            Float? @db.DoublePrecision
+  salary_max            Float? @db.DoublePrecision
 
   effective_date DateTime @default(now())
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  users  User[]
+  tenant             Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  position           Position?          @relation(fields: [position_id], references: [id], onDelete: SetNull)
+  job_classification JobClassification? @relation(fields: [job_classification_id], references: [id], onDelete: SetNull)
+  users              User[]
 
-  @@unique([tenant_id, job_code])
   @@index([tenant_id])
+  @@index([position_id])
   @@map("job_informations")
+}
+
+// ─── MDF: METADATA FRAMEWORK (Object Definitions) ─────────────────
+
+model ObjectDefinition {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String @db.Uuid
+  code        String
+  label       String
+  schema_json Json   @db.JsonB
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("object_definitions")
+}
+
+// ─── BUSINESS RULES ENGINE ─────────────────────────────────────────
+
+model BusinessRule {
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String  @db.Uuid
+  rule_id               String
+  base_object           String
+  trigger_event         String
+  conditions_actions_json Json   @db.JsonB
+  status                Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, rule_id])
+  @@index([tenant_id])
+  @@index([base_object])
+  @@map("business_rules")
 }
 
 // ─── TALENT: PERFORMANCE & GOAL MANAGEMENT (PMGM) ──────────────────

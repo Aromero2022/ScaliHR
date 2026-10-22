@@ -17,3 +17,4 @@ ios/
 *.mobileprovision
 *.orig.*
 web-build/
+*.tsbuildinfo
