@@ -18,3 +18,4 @@ ios/
 *.orig.*
 web-build/
 *.tsbuildinfo
+supabase/.temp/

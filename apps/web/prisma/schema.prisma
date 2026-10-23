@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── MULTI-TENANT CORE ─────────────────────────────────────────────
@@ -28,6 +29,7 @@ model Tenant {
   is_wfa_active  Boolean @default(false) // Workforce Analytics
   is_wfp_active  Boolean @default(false) // Workforce Planning
   is_tme_active  Boolean @default(false) // Time Management
+  is_tih_active  Boolean @default(false) // Talent Intelligence Hub
 
   users                User[]
   departments          Department[]
@@ -42,6 +44,19 @@ model Tenant {
   continuous_feedbacks ContinuousFeedback[]
   talent_pools         TalentPool[]
   succession_plans     SuccessionPlan[]
+
+  // TIH (Talent Intelligence Hub)
+  skill_ontology        SkillOntology[]
+  job_role_skills       JobRoleSkill[]
+  employee_skills       EmployeeSkill[]
+
+  // RBP & Admin Center
+  permission_groups     PermissionGroup[]
+  permission_roles      PermissionRole[]
+  role_permissions      RolePermission[]
+  role_assignments      RoleAssignment[]
+  system_configurations SystemConfiguration[]
+  audit_logs            AuditLog[]
 
   @@map("tenants")
 }
@@ -85,6 +100,8 @@ model User {
   owned_goals         PerformanceGoal[]
   talent_pool_entries TalentPoolEntry[]
   succession_nominees SuccessionNominee[]
+  employee_skills     EmployeeSkill[]
+  audit_logs          AuditLog[]
 
   @@unique([tenant_id, email])
   @@index([tenant_id])
@@ -154,6 +171,7 @@ model JobRole {
   tenant              Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   job_family          JobFamily           @relation(fields: [job_family_id], references: [id], onDelete: Cascade)
   job_classifications JobClassification[]
+  job_role_skills     JobRoleSkill[]
 
   @@unique([tenant_id, role_code])
   @@index([tenant_id])
@@ -295,6 +313,8 @@ model PerformanceGoal {
   actual_value Float?  @db.DoublePrecision
   weight     Float?   @db.DoublePrecision
   status     GoalStatus @default(ON_TRACK)
+  due_date   DateTime?
+  progress_percentage Int @default(0)
   period_start DateTime
   period_end   DateTime
 
@@ -450,4 +470,203 @@ model SuccessionNominee {
 
   @@unique([succession_plan_id, user_id])
   @@map("succession_nominees")
+}
+
+// ─── TALENT INTELLIGENCE HUB (TIH) ────────────────────────────────
+
+model SkillOntology {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String       @db.Uuid
+  code        String
+  name        String
+  description String?
+  category    SkillCategory @default(TECHNICAL)
+  is_active   Boolean      @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_role_skills JobRoleSkill[]
+  employee_skills EmployeeSkill[]
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@index([category])
+  @@map("skill_ontology")
+}
+
+enum SkillCategory {
+  TECHNICAL
+  LEADERSHIP
+  FUNCTIONAL
+  INTERPERSONAL
+  LANGUAGE
+  CERTIFICATION
+}
+
+model JobRoleSkill {
+  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String @db.Uuid
+  job_role_id      String @db.Uuid
+  skill_id         String @db.Uuid
+  required_level   Int    @default(3)
+  importance       SkillImportance @default(REQUIRED)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant   Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_role JobRole       @relation(fields: [job_role_id], references: [id], onDelete: Cascade)
+  skill    SkillOntology @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@unique([job_role_id, skill_id])
+  @@index([tenant_id])
+  @@index([job_role_id])
+  @@index([skill_id])
+  @@map("job_role_skills")
+}
+
+enum SkillImportance {
+  CRITICAL
+  REQUIRED
+  PREFERRED
+  NICE_TO_HAVE
+}
+
+model EmployeeSkill {
+  id                  String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String @db.Uuid
+  user_id             String @db.Uuid
+  skill_id            String @db.Uuid
+  self_assessed_level Int    @default(1)
+  manager_assessed_level Int?
+  verified            Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill  SkillOntology @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, skill_id])
+  @@index([tenant_id])
+  @@index([user_id])
+  @@index([skill_id])
+  @@map("employee_skills")
+}
+
+// ─── ROLE-BASED PERMISSIONS (RBP) ──────────────────────────────────
+
+model PermissionGroup {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String @db.Uuid
+  name          String
+  description   String?
+  criteria_json Json?  @db.JsonB
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant               Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  granted_assignments  RoleAssignment[] @relation("GrantedGroup")
+  target_assignments   RoleAssignment[] @relation("TargetPopulation")
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@map("permission_groups")
+}
+
+model PermissionRole {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String  @db.Uuid
+  name          String
+  description   String?
+  is_admin_role Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role_permissions RolePermission[]
+  role_assignments RoleAssignment[]
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@map("permission_roles")
+}
+
+model RolePermission {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String @db.Uuid
+  role_id         String @db.Uuid
+  permission_name String
+
+  created_at DateTime @default(now())
+
+  tenant Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role   PermissionRole @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, permission_name])
+  @@index([tenant_id])
+  @@index([role_id])
+  @@map("role_permissions")
+}
+
+model RoleAssignment {
+  id                         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                  String @db.Uuid
+  role_id                    String @db.Uuid
+  granted_group_id           String @db.Uuid
+  target_population_group_id String @db.Uuid
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant           Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  role             PermissionRole  @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  granted_group    PermissionGroup @relation("GrantedGroup", fields: [granted_group_id], references: [id], onDelete: Cascade)
+  target_population PermissionGroup @relation("TargetPopulation", fields: [target_population_group_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([role_id])
+  @@map("role_assignments")
+}
+
+// ─── ADMIN CENTER / PLATFORM ───────────────────────────────────────
+
+model SystemConfiguration {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id String @db.Uuid
+  key       String
+  value_json Json  @db.JsonB
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, key])
+  @@index([tenant_id])
+  @@map("system_configurations")
+}
+
+model AuditLog {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id    String @db.Uuid
+  user_id      String @db.Uuid
+  action       String
+  details_json Json?  @db.JsonB
+
+  created_at DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([user_id])
+  @@index([action])
+  @@index([created_at])
+  @@map("audit_logs")
 }
