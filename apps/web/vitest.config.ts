@@ -8,6 +8,17 @@ export default defineConfig({
       "@talentgo/shared": path.resolve(__dirname, "../../packages/shared/src"),
     },
   },
+  plugins: [
+    {
+      name: "resolve-parenthesized-routes",
+      resolveId(source) {
+        if (source.startsWith("@/") && source.includes("(")) {
+          const resolved = path.resolve(__dirname, "src", source.slice(2));
+          return resolved + ".ts";
+        }
+      },
+    },
+  ],
   test: {
     globals: true,
     environment: "node",
