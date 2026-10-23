@@ -79,7 +79,7 @@ function mockSupabase(options?: {
   rpcResult?: { data: unknown; error: unknown };
   chainOverrides?: Parameters<typeof buildChain>[0];
 }) {
-  const user = options?.user ?? {
+  const user = options && "user" in options ? options.user : {
     id: "auth-uid-1",
     app_metadata: { tenant_id: "tenant-1" },
   };
@@ -103,7 +103,7 @@ function mockSupabase(options?: {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("updateSelfAssessment", () => {
@@ -123,7 +123,15 @@ describe("updateSelfAssessment", () => {
   });
 
   it("returns error when not authenticated", async () => {
-    mockSupabase({ user: null });
+    const noAuthSupabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+      },
+      from: vi.fn(),
+      rpc: vi.fn(),
+    };
+    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(noAuthSupabase);
+
     const res = await updateSelfAssessment({ skillId: UUID_SKILL, level: 3 });
     expect(res).toEqual({ error: "No autenticado" });
   });
@@ -256,7 +264,7 @@ describe("skills-hub page module gating", () => {
         })),
       })),
     });
-    const { getModuleFlags } = await import("@/lib/tenant/get-module-flags");
+    const { getModuleFlags } = await import("../src/lib/tenant/get-module-flags");
     const flags = await getModuleFlags("nonexistent-tenant");
     expect(flags.is_tih_active).toBe(false);
   });
