@@ -107,19 +107,16 @@ beforeEach(() => {
 });
 
 describe("updateSelfAssessment", () => {
-  it("upserts only self_assessed_level and self_assessed_at, never manager columns", async () => {
-    const { chain } = mockSupabase();
+  it("calls upsert_self_assessment RPC with correct params", async () => {
+    const { rpcFn } = mockSupabase({ rpcResult: { data: null, error: null } });
     mockCan.mockResolvedValue({ allowed: true });
 
     await updateSelfAssessment({ skillId: UUID_SKILL, level: 4 });
 
-    expect(chain.upsert).toHaveBeenCalledTimes(1);
-    const upsertArg = chain.upsert.mock.calls[0][0] as Record<string, unknown>;
-    expect(upsertArg).toHaveProperty("self_assessed_level", 4);
-    expect(upsertArg).toHaveProperty("self_assessed_at");
-    expect(upsertArg).not.toHaveProperty("manager_assessed_level");
-    expect(upsertArg).not.toHaveProperty("manager_assessed_at");
-    expect(upsertArg).not.toHaveProperty("manager_assessed_by");
+    expect(rpcFn).toHaveBeenCalledWith("upsert_self_assessment", {
+      p_skill_id: UUID_SKILL,
+      p_level: 4,
+    });
   });
 
   it("returns error when not authenticated", async () => {
@@ -183,11 +180,9 @@ describe("setManagerAssessment", () => {
 describe("cross-tenant FK enforcement", () => {
   it("employee_skills insert with a skill from another tenant fails", async () => {
     mockSupabase({
-      chainOverrides: {
-        upsertResult: {
-          data: null,
-          error: { message: 'violates foreign key constraint "es_skill_fk"' },
-        },
+      rpcResult: {
+        data: null,
+        error: { message: 'violates foreign key constraint "es_skill_fk"' },
       },
     });
     mockCan.mockResolvedValue({ allowed: true });
