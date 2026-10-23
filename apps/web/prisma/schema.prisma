@@ -28,6 +28,7 @@ model Tenant {
   is_wfa_active  Boolean @default(false) // Workforce Analytics
   is_wfp_active  Boolean @default(false) // Workforce Planning
   is_tme_active  Boolean @default(false) // Time Management
+  is_tih_active  Boolean @default(false) // Talent Intelligence Hub
 
   users                User[]
   departments          Department[]
@@ -42,6 +43,11 @@ model Tenant {
   continuous_feedbacks ContinuousFeedback[]
   talent_pools         TalentPool[]
   succession_plans     SuccessionPlan[]
+
+  // TIH (Talent Intelligence Hub)
+  skill_ontology        SkillOntology[]
+  job_role_skills       JobRoleSkill[]
+  employee_skills       EmployeeSkill[]
 
   // RBP & Admin Center
   permission_groups     PermissionGroup[]
@@ -93,6 +99,7 @@ model User {
   owned_goals         PerformanceGoal[]
   talent_pool_entries TalentPoolEntry[]
   succession_nominees SuccessionNominee[]
+  employee_skills     EmployeeSkill[]
   audit_logs          AuditLog[]
 
   @@unique([tenant_id, email])
@@ -163,6 +170,7 @@ model JobRole {
   tenant              Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   job_family          JobFamily           @relation(fields: [job_family_id], references: [id], onDelete: Cascade)
   job_classifications JobClassification[]
+  job_role_skills     JobRoleSkill[]
 
   @@unique([tenant_id, role_code])
   @@index([tenant_id])
@@ -461,6 +469,91 @@ model SuccessionNominee {
 
   @@unique([succession_plan_id, user_id])
   @@map("succession_nominees")
+}
+
+// ─── TALENT INTELLIGENCE HUB (TIH) ────────────────────────────────
+
+model SkillOntology {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String       @db.Uuid
+  code        String
+  name        String
+  description String?
+  category    SkillCategory @default(TECHNICAL)
+  is_active   Boolean      @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_role_skills JobRoleSkill[]
+  employee_skills EmployeeSkill[]
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@index([category])
+  @@map("skill_ontology")
+}
+
+enum SkillCategory {
+  TECHNICAL
+  LEADERSHIP
+  FUNCTIONAL
+  INTERPERSONAL
+  LANGUAGE
+  CERTIFICATION
+}
+
+model JobRoleSkill {
+  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String @db.Uuid
+  job_role_id      String @db.Uuid
+  skill_id         String @db.Uuid
+  required_level   Int    @default(3)
+  importance       SkillImportance @default(REQUIRED)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant   Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  job_role JobRole       @relation(fields: [job_role_id], references: [id], onDelete: Cascade)
+  skill    SkillOntology @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@unique([job_role_id, skill_id])
+  @@index([tenant_id])
+  @@index([job_role_id])
+  @@index([skill_id])
+  @@map("job_role_skills")
+}
+
+enum SkillImportance {
+  CRITICAL
+  REQUIRED
+  PREFERRED
+  NICE_TO_HAVE
+}
+
+model EmployeeSkill {
+  id                  String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String @db.Uuid
+  user_id             String @db.Uuid
+  skill_id            String @db.Uuid
+  self_assessed_level Int    @default(1)
+  manager_assessed_level Int?
+  verified            Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tenant Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill  SkillOntology @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, skill_id])
+  @@index([tenant_id])
+  @@index([user_id])
+  @@index([skill_id])
+  @@map("employee_skills")
 }
 
 // ─── ROLE-BASED PERMISSIONS (RBP) ──────────────────────────────────
