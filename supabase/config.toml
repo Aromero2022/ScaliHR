@@ -14,6 +14,18 @@ major_version = 17
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
+jwt_expiry = 900
+
+[auth.sessions]
+timebox = "24h"
+inactivity_timeout = "1h"
+
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
 
 [auth.email]
 enable_signup = true
