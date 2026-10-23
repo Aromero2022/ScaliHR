@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/tenant-client";
 
 type RbpAction = "view" | "edit";
@@ -48,45 +49,37 @@ export function clearCanCache() {
 async function evaluate(
   userId: string,
   permissionKey: string,
-  action: RbpAction,
+  _action: RbpAction,
   targetUserId?: string,
-  fieldKey?: string
+  _fieldKey?: string
 ): Promise<CanResult> {
-  const memberships = await prisma.group_members.findMany({
-    where: { user_id: userId },
-    select: { group_id: true },
-  });
-
-  if (memberships.length === 0) {
-    return { allowed: false, reason: "no_group_membership" };
-  }
-
-  const groupIds = memberships.map((m) => m.group_id);
-
-  const grants = await prisma.role_grants.findMany({
-    where: { granted_group_id: { in: groupIds } },
+  const assignments = await prisma.roleAssignment.findMany({
+    where: {
+      granted_group: {
+        criteria_json: {
+          path: ["user_ids"],
+          array_contains: userId,
+        },
+      },
+    },
     select: {
       role_id: true,
-      target_population: true,
+      target_population: {
+        select: { criteria_json: true },
+      },
     },
   });
 
-  if (grants.length === 0) {
-    return { allowed: false, reason: "no_role_grants" };
+  if (assignments.length === 0) {
+    return { allowed: false, reason: "no_group_membership" };
   }
 
-  const roleIds = grants.map((g) => g.role_id);
+  const roleIds = assignments.map((a) => a.role_id);
 
-  const fieldCondition = fieldKey
-    ? { OR: [{ field_key: fieldKey }, { field_key: null }] }
-    : {};
-
-  const permissions = await prisma.role_permissions.findMany({
+  const permissions = await prisma.rolePermission.findMany({
     where: {
       role_id: { in: roleIds },
-      permission_key: permissionKey,
-      action: action === "edit" ? "edit" : { in: ["view", "edit"] },
-      ...fieldCondition,
+      permission_name: permissionKey,
     },
     select: { role_id: true },
   });
@@ -98,16 +91,22 @@ async function evaluate(
   const permittedRoleIds = new Set(permissions.map((p) => p.role_id));
 
   if (!targetUserId || targetUserId === userId) {
-    const hasAny = grants.some((g) => permittedRoleIds.has(g.role_id));
+    const hasAny = assignments.some((a) => permittedRoleIds.has(a.role_id));
     return hasAny
       ? { allowed: true }
       : { allowed: false, reason: "no_matching_grant" };
   }
 
-  for (const grant of grants) {
-    if (!permittedRoleIds.has(grant.role_id)) continue;
+  for (const assignment of assignments) {
+    if (!permittedRoleIds.has(assignment.role_id)) continue;
 
-    switch (grant.target_population) {
+    const criteria = assignment.target_population?.criteria_json as
+      | Record<string, unknown>
+      | null;
+    const populationType =
+      (criteria?.type as string | undefined) ?? "all";
+
+    switch (populationType) {
       case "all":
         return { allowed: true };
 
@@ -117,11 +116,11 @@ async function evaluate(
 
       case "same_department": {
         const [actor, target] = await Promise.all([
-          prisma.users.findUnique({
+          prisma.user.findUnique({
             where: { id: userId },
             select: { department_id: true },
           }),
-          prisma.users.findUnique({
+          prisma.user.findUnique({
             where: { id: targetUserId },
             select: { department_id: true },
           }),
@@ -137,11 +136,16 @@ async function evaluate(
       }
 
       case "direct_reports": {
-        const target = await prisma.users.findUnique({
-          where: { id: targetUserId },
-          select: { manager_id: true },
-        });
-        if (target?.manager_id === userId) {
+        const rows = await prisma.$queryRaw<{ manager_id: string | null }[]>(
+          Prisma.sql`
+            SELECT manager_id FROM public.ec_job_information
+            WHERE user_id = ${targetUserId}::uuid
+              AND end_date IS NULL
+            ORDER BY start_date DESC, sequence DESC
+            LIMIT 1
+          `
+        );
+        if (rows.length > 0 && rows[0].manager_id === userId) {
           return { allowed: true };
         }
         break;

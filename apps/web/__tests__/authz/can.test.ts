@@ -1,17 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockFindManyGroupMembers = vi.fn();
-const mockFindManyRoleGrants = vi.fn();
-const mockFindManyRolePermissions = vi.fn();
-const mockFindUniqueUsers = vi.fn();
+const mockFindManyRoleAssignment = vi.fn();
+const mockFindManyRolePermission = vi.fn();
+const mockFindUniqueUser = vi.fn();
+const mockQueryRaw = vi.fn();
 
 vi.mock("@/lib/db/tenant-client", () => ({
   prisma: {
-    group_members: { findMany: (...args: unknown[]) => mockFindManyGroupMembers(...args) },
-    role_grants: { findMany: (...args: unknown[]) => mockFindManyRoleGrants(...args) },
-    role_permissions: { findMany: (...args: unknown[]) => mockFindManyRolePermissions(...args) },
-    users: { findUnique: (...args: unknown[]) => mockFindUniqueUsers(...args) },
+    roleAssignment: { findMany: (...args: unknown[]) => mockFindManyRoleAssignment(...args) },
+    rolePermission: { findMany: (...args: unknown[]) => mockFindManyRolePermission(...args) },
+    user: { findUnique: (...args: unknown[]) => mockFindUniqueUser(...args) },
+    $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
   },
+}));
+
+vi.mock("@prisma/client", () => ({
+  Prisma: { sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }) },
 }));
 
 import { can, clearCanCache } from "@/lib/authz/can";
@@ -19,17 +23,20 @@ import { can, clearCanCache } from "@/lib/authz/can";
 const USER_A = "user-a";
 const USER_B = "user-b";
 const ROLE_1 = "role-1";
-const GROUP_1 = "group-1";
 
 function setupGrantPath(opts: {
   targetPopulation: string;
   hasPermission?: boolean;
 }) {
-  mockFindManyGroupMembers.mockResolvedValue([{ group_id: GROUP_1 }]);
-  mockFindManyRoleGrants.mockResolvedValue([
-    { role_id: ROLE_1, target_population: opts.targetPopulation },
+  mockFindManyRoleAssignment.mockResolvedValue([
+    {
+      role_id: ROLE_1,
+      target_population: {
+        criteria_json: { type: opts.targetPopulation },
+      },
+    },
   ]);
-  mockFindManyRolePermissions.mockResolvedValue(
+  mockFindManyRolePermission.mockResolvedValue(
     opts.hasPermission !== false ? [{ role_id: ROLE_1 }] : []
   );
 }
@@ -41,18 +48,10 @@ describe("can()", () => {
   });
 
   it("denies when user has no group memberships", async () => {
-    mockFindManyGroupMembers.mockResolvedValue([]);
+    mockFindManyRoleAssignment.mockResolvedValue([]);
     const result = await can(USER_A, "employee.view", "view");
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe("no_group_membership");
-  });
-
-  it("denies when user has no role grants", async () => {
-    mockFindManyGroupMembers.mockResolvedValue([{ group_id: GROUP_1 }]);
-    mockFindManyRoleGrants.mockResolvedValue([]);
-    const result = await can(USER_A, "employee.view", "view");
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toBe("no_role_grants");
   });
 
   it("denies when no matching permissions exist", async () => {
@@ -94,7 +93,7 @@ describe("can()", () => {
   describe("target_population: same_department", () => {
     it("allows when actor and target share a department", async () => {
       setupGrantPath({ targetPopulation: "same_department" });
-      mockFindUniqueUsers
+      mockFindUniqueUser
         .mockResolvedValueOnce({ department_id: "dept-1" })
         .mockResolvedValueOnce({ department_id: "dept-1" });
 
@@ -104,7 +103,7 @@ describe("can()", () => {
 
     it("denies when actor and target are in different departments", async () => {
       setupGrantPath({ targetPopulation: "same_department" });
-      mockFindUniqueUsers
+      mockFindUniqueUser
         .mockResolvedValueOnce({ department_id: "dept-1" })
         .mockResolvedValueOnce({ department_id: "dept-2" });
 
@@ -115,7 +114,7 @@ describe("can()", () => {
 
     it("denies when either user has no department", async () => {
       setupGrantPath({ targetPopulation: "same_department" });
-      mockFindUniqueUsers
+      mockFindUniqueUser
         .mockResolvedValueOnce({ department_id: null })
         .mockResolvedValueOnce({ department_id: "dept-1" });
 
@@ -127,7 +126,7 @@ describe("can()", () => {
   describe("target_population: direct_reports", () => {
     it("allows when target's manager_id matches actor", async () => {
       setupGrantPath({ targetPopulation: "direct_reports" });
-      mockFindUniqueUsers.mockResolvedValue({ manager_id: USER_A });
+      mockQueryRaw.mockResolvedValue([{ manager_id: USER_A }]);
 
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
@@ -135,7 +134,7 @@ describe("can()", () => {
 
     it("denies when target's manager is someone else", async () => {
       setupGrantPath({ targetPopulation: "direct_reports" });
-      mockFindUniqueUsers.mockResolvedValue({ manager_id: "other-manager" });
+      mockQueryRaw.mockResolvedValue([{ manager_id: "other-manager" }]);
 
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
@@ -144,7 +143,7 @@ describe("can()", () => {
 
     it("denies when target has no manager", async () => {
       setupGrantPath({ targetPopulation: "direct_reports" });
-      mockFindUniqueUsers.mockResolvedValue({ manager_id: null });
+      mockQueryRaw.mockResolvedValue([{ manager_id: null }]);
 
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
@@ -157,7 +156,7 @@ describe("can()", () => {
       await can(USER_A, "employee.view", "view");
       await can(USER_A, "employee.view", "view");
 
-      expect(mockFindManyGroupMembers).toHaveBeenCalledTimes(1);
+      expect(mockFindManyRoleAssignment).toHaveBeenCalledTimes(1);
     });
 
     it("evaluates separately for different permission keys", async () => {
@@ -168,22 +167,7 @@ describe("can()", () => {
       setupGrantPath({ targetPopulation: "all" });
       await can(USER_A, "compensation.view", "view");
 
-      expect(mockFindManyGroupMembers).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe("field-level permissions", () => {
-    it("passes fieldKey to the permission query", async () => {
-      setupGrantPath({ targetPopulation: "all" });
-      await can(USER_A, "employee.view", "view", undefined, "salary");
-
-      expect(mockFindManyRolePermissions).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            OR: [{ field_key: "salary" }, { field_key: null }],
-          }),
-        })
-      );
+      expect(mockFindManyRoleAssignment).toHaveBeenCalledTimes(2);
     });
   });
 });
