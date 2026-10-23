@@ -146,6 +146,7 @@ ALTER TABLE employee_skills
 -- ═══════════════════════════════════════════════════════════════════
 
 DROP TYPE IF EXISTS "SkillImportance";
+ALTER TABLE skill_ontology ALTER COLUMN category SET DEFAULT 'technical';
 DROP TYPE IF EXISTS "SkillCategory";
 
 -- ═══════════════════════════════════════════════════════════════════
