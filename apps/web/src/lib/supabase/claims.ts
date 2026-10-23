@@ -40,7 +40,7 @@ export async function requireAuth(): Promise<SessionClaims> {
   const claims = await getClaims();
   if (!claims) {
     const { redirect } = await import("next/navigation");
-    redirect("/login");
+    return redirect("/login") as never;
   }
   return claims;
 }

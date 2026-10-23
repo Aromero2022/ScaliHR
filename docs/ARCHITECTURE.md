@@ -66,8 +66,8 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
 - All secrets read from `.env` (never committed). `.env.example` has
   placeholders only.
 - Docker services publish ports on `127.0.0.1` only.
-- `check:forbidden` script fails on `"talentgo"`, `"bitnami"`, or
-  `"service_role"` in client code.
+- `check:forbidden` script fails on `"service_role"`, `"bitnami"`, or
+  `"MOODLE_WS_TOKEN"` in client code (server-only files allowlisted).
 - Pre-commit hook (husky + lint-staged) runs `check:forbidden` + lint.
 
 ---
@@ -82,6 +82,39 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
 | 6 | RBP + Admin Center | permission_groups/roles, role_permissions/assignments | /admin-center |
 | 7 | PMGM (Performance) | performance_goals, continuous_feedbacks | /performance |
 | 8 | TIH (Talent Intelligence) | skill_ontology, job_role_skills, employee_skills | /skills-hub |
+| 9 | LMS (Formación) | lms_tenant_map, lms_user_map | /lms |
+
+---
+
+## D5 — LMS Integration (Moodle)
+
+**Decision:** Moodle (`moodlehq/moodle-php-apache`) runs as a sidecar service
+alongside the application stack. Scalia HR communicates with it exclusively via
+REST web services, using a single service token (`MOODLE_WS_TOKEN`) stored
+server-side.
+
+**SSO:** `auth_userkey` plugin, mapping by `username` = Supabase user UUID.
+The `/lms/launch` route auto-provisions the Moodle user on first access and
+redirects via `auth_userkey_request_login_url`.
+
+**Tenant Isolation:**
+- Each tenant gets its own Moodle **category** (courses) and **cohort**
+  (employees), stored in `lms_tenant_map`.
+- `lms_user_map` associates each Supabase user with their Moodle user ID.
+- Both tables have RLS ENABLED + FORCED, scoped by JWT `tenant_id`.
+
+**Sync (`lib/jobs/lms-sync.ts`):**
+- ACTIVE + unmapped → create Moodle user, add to cohort, store mapping.
+- TERMINATED + mapped → suspend in Moodle.
+- `is_anonymized` + mapped → suspend + anonymize (ARCO: firstname=Usuario,
+  lastname=Anonimizado, email=`anon_{id}@scalia.local`).
+- ACTIVE + mapped → unsuspend (rehire).
+
+**Security:**
+- `moodle-client.ts` has a `typeof window !== "undefined"` server-only guard.
+- `MOODLE_WS_TOKEN` is in the `check:forbidden` list.
+- Server-only files (moodle-client, provision-tenant, lms-sync) are allowlisted.
+- Moodle Docker service binds only to `127.0.0.1`.
 
 ---
 
@@ -98,3 +131,4 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
 9. `20261023030100_auth_tenant_claims.sql` ← D2
 10. `20261023030200_rls_policies_v2.sql` ← D3 policies
 11. `20261023030300_app_roles.sql` ← D3 prisma_app role
+12. `20261023060000_lms_tenant_map.sql` ← D5 LMS tables + RLS
