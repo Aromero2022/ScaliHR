@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { updateSelfAssessment } from "@/app/(protected)/skills-hub/actions";
+import {
+  updateSelfAssessment,
+  setManagerAssessment,
+} from "@/app/(protected)/skills-hub/actions";
 
 interface OntologySkill {
   id: string;
@@ -30,10 +33,26 @@ interface RoleSkill {
   skill_category: string;
 }
 
+interface TeamMemberSkill {
+  skill_id: string;
+  skill_name: string;
+  skill_category: string;
+  self_assessed_level: number;
+  manager_assessed_level: number | null;
+}
+
+interface TeamMember {
+  user_id: string;
+  full_name: string;
+  skills: TeamMemberSkill[];
+}
+
 interface Props {
   ontology: OntologySkill[];
   mySkills: MySkill[];
   roleSkills: RoleSkill[];
+  teamMembers?: TeamMember[];
+  isManager?: boolean;
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -43,8 +62,16 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string
 };
 
 
-export default function SkillsHubDashboard({ ontology, mySkills, roleSkills }: Props) {
-  const [activeTab, setActiveTab] = useState<"radar" | "catalog">("radar");
+type TabKey = "radar" | "catalog" | "team";
+
+export default function SkillsHubDashboard({
+  ontology,
+  mySkills,
+  roleSkills,
+  teamMembers = [],
+  isManager = false,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<TabKey>("radar");
 
   const assessedCount = mySkills.length;
   const gapCount = roleSkills.filter(
@@ -58,35 +85,48 @@ export default function SkillsHubDashboard({ ontology, mySkills, roleSkills }: P
       ? (mySkills.reduce((sum, s) => sum + s.self_assessed_level, 0) / assessedCount).toFixed(1)
       : "—";
 
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "radar", label: "Radar de Competencias" },
+    { key: "catalog", label: "Catálogo de Habilidades" },
+  ];
+  if (isManager) {
+    tabs.push({ key: "team", label: "Mi Equipo" });
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className={clsx("grid gap-4", isManager ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
         <StatTile label="Habilidades Evaluadas" value={assessedCount} />
         <StatTile label="Brechas Detectadas" value={gapCount} accent="amber" />
         <StatTile label="Nivel Promedio" value={avgLevel} accent="indigo" />
+        {isManager && (
+          <StatTile label="Reportes Directos" value={teamMembers.length} accent="emerald" />
+        )}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg bg-slate-800/50 p-1">
-        {(["radar", "catalog"] as const).map((tab) => (
+        {tabs.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
             className={clsx(
               "flex-1 rounded-md px-4 py-2 text-sm font-medium transition",
-              activeTab === tab
+              activeTab === tab.key
                 ? "bg-indigo-600 text-white shadow"
                 : "text-slate-400 hover:text-slate-200"
             )}
           >
-            {tab === "radar" ? "Radar de Competencias" : "Catálogo de Habilidades"}
+            {tab.label}
           </button>
         ))}
       </div>
 
       {activeTab === "radar" ? (
         <SkillRadar mySkills={mySkills} roleSkills={roleSkills} />
+      ) : activeTab === "team" ? (
+        <TeamView members={teamMembers} />
       ) : (
         <SkillCatalog ontology={ontology} mySkills={mySkills} />
       )}
@@ -110,7 +150,9 @@ function StatTile({
       ? "border-amber-500/30"
       : accent === "indigo"
         ? "border-indigo-500/30"
-        : "border-slate-700";
+        : accent === "emerald"
+          ? "border-emerald-500/30"
+          : "border-slate-700";
   return (
     <div className={clsx("rounded-xl border bg-slate-900 p-4", ring)}>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
@@ -493,6 +535,249 @@ function SkillCard({
           onDone={() => setShowAssess(false)}
         />
       )}
+    </div>
+  );
+}
+
+/* ─── Team View (Manager) ───────────────────────────────────────── */
+
+function TeamView({ members }: { members: TeamMember[] }) {
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
+
+  if (members.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-8 text-center">
+        <p className="text-slate-400">No tienes reportes directos registrados.</p>
+        <p className="mt-2 text-sm text-slate-500">
+          Los reportes se determinan por la relación de manager en la información de puesto.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {members.map((member) => {
+        const isExpanded = expandedMember === member.user_id;
+        const skillCount = member.skills.length;
+        const avgLevel =
+          skillCount > 0
+            ? (
+                member.skills.reduce((s, sk) => s + sk.self_assessed_level, 0) /
+                skillCount
+              ).toFixed(1)
+            : "—";
+        const assessedByManager = member.skills.filter(
+          (sk) => sk.manager_assessed_level !== null
+        ).length;
+
+        return (
+          <div
+            key={member.user_id}
+            className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden"
+          >
+            <button
+              onClick={() =>
+                setExpandedMember(isExpanded ? null : member.user_id)
+              }
+              className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-800/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/20 text-sm font-semibold text-indigo-400">
+                  {member.full_name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {member.full_name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {skillCount} habilidades · Promedio: {avgLevel} ·{" "}
+                    {assessedByManager}/{skillCount} evaluadas por manager
+                  </p>
+                </div>
+              </div>
+              <span
+                className={clsx(
+                  "text-slate-400 transition",
+                  isExpanded && "rotate-180"
+                )}
+              >
+                ▾
+              </span>
+            </button>
+
+            {isExpanded && (
+              <div className="border-t border-slate-700 p-4">
+                {member.skills.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Este colaborador aún no ha registrado habilidades.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {member.skills.map((skill) => (
+                      <TeamSkillRow
+                        key={skill.skill_id}
+                        userId={member.user_id}
+                        skill={skill}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Team Skill Row ────────────────────────────────────────────── */
+
+function TeamSkillRow({
+  userId,
+  skill,
+}: {
+  userId: string;
+  skill: TeamMemberSkill;
+}) {
+  const [showAssess, setShowAssess] = useState(false);
+  const catConf = CATEGORY_CONFIG[skill.skill_category];
+
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white">
+            {skill.skill_name}
+          </span>
+          <span className={clsx("text-xs", catConf?.color ?? "text-slate-400")}>
+            {catConf?.label ?? skill.skill_category}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowAssess(!showAssess)}
+          className="text-xs text-emerald-400 hover:text-emerald-300"
+        >
+          {showAssess ? "Cerrar" : "Evaluar"}
+        </button>
+      </div>
+      <div className="mt-2 flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Auto:</span>
+          <div className="flex items-center gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <span
+                key={i}
+                className={clsx(
+                  "h-2 w-2 rounded-full",
+                  i < skill.self_assessed_level
+                    ? "bg-indigo-400"
+                    : "bg-slate-600"
+                )}
+              />
+            ))}
+          </div>
+          <span className="text-xs text-slate-400">
+            {skill.self_assessed_level}/5
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Manager:</span>
+          {skill.manager_assessed_level !== null ? (
+            <>
+              <div className="flex items-center gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span
+                    key={i}
+                    className={clsx(
+                      "h-2 w-2 rounded-full",
+                      i < (skill.manager_assessed_level ?? 0)
+                        ? "bg-emerald-400"
+                        : "bg-slate-600"
+                    )}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-emerald-400">
+                {skill.manager_assessed_level}/5
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-slate-600">Sin evaluar</span>
+          )}
+        </div>
+      </div>
+      {showAssess && (
+        <ManagerLevelSelector
+          userId={userId}
+          skillId={skill.skill_id}
+          currentLevel={skill.manager_assessed_level ?? 0}
+          onDone={() => setShowAssess(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Manager Level Selector ────────────────────────────────────── */
+
+function ManagerLevelSelector({
+  userId,
+  skillId,
+  currentLevel,
+  onDone,
+}: {
+  userId: string;
+  skillId: string;
+  currentLevel: number;
+  onDone: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSelect(level: number) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setManagerAssessment({ userId, skillId, level });
+      if ("error" in result) {
+        setError(result.error);
+      } else {
+        onDone();
+      }
+    });
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg bg-slate-800 p-3">
+      <span className="text-xs text-slate-400">Evaluación manager:</span>
+      {[1, 2, 3, 4, 5].map((level) => (
+        <button
+          key={level}
+          disabled={pending}
+          onClick={() => handleSelect(level)}
+          className={clsx(
+            "flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition",
+            level === currentLevel
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+          )}
+        >
+          {level}
+        </button>
+      ))}
+      <button
+        onClick={onDone}
+        className="ml-auto text-xs text-slate-500 hover:text-slate-300"
+      >
+        Cancelar
+      </button>
+      {error && <span className="text-xs text-red-400">{error}</span>}
     </div>
   );
 }

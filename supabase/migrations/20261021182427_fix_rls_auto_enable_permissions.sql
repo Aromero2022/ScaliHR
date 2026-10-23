@@ -7,12 +7,17 @@
 -- fires with the trigger owner's privileges, so revoking EXECUTE from
 -- API-facing roles does not affect the event trigger.
 
--- 1. Revoke from the catch-all PUBLIC pseudo-role (covers any future roles too)
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
-
--- 2. Explicitly revoke from API-facing roles
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon;
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
-
--- 3. Grant only to service_role (admin-level API access)
-GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+-- Guard: rls_auto_enable() may not exist on a fresh db reset (it was
+-- created manually on the original instance, not via a migration).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'rls_auto_enable'
+  ) THEN
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon;
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
+    GRANT  EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+  END IF;
+END $$;
