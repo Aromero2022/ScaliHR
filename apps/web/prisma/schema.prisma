@@ -304,6 +304,8 @@ model PerformanceGoal {
   actual_value Float?  @db.DoublePrecision
   weight     Float?   @db.DoublePrecision
   status     GoalStatus @default(ON_TRACK)
+  due_date   DateTime?
+  progress_percentage Int @default(0)
   period_start DateTime
   period_end   DateTime
 

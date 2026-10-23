@@ -1,0 +1,92 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+
+export async function createGoal(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return { error: "No autenticado" };
+
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id, tenant_id")
+    .eq("auth_uid", authUser.id)
+    .single();
+
+  if (!bizUser) return { error: "Usuario no encontrado" };
+
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const metric = formData.get("metric") as string;
+  const targetValue = parseFloat(formData.get("target_value") as string) || null;
+  const dueDate = formData.get("due_date") as string;
+  const weight = parseFloat(formData.get("weight") as string) || 0;
+  const periodStart = formData.get("period_start") as string;
+  const periodEnd = formData.get("period_end") as string;
+
+  if (!title || !periodStart || !periodEnd) {
+    return { error: "Título, fecha inicio y fecha fin son obligatorios" };
+  }
+
+  const { error } = await supabase.from("performance_goals").insert({
+    tenant_id: bizUser.tenant_id,
+    user_id: bizUser.id,
+    title,
+    description: description || null,
+    metric: metric || null,
+    target_value: targetValue,
+    weight,
+    status: "NOT_STARTED",
+    due_date: dueDate || null,
+    progress_percentage: 0,
+    period_start: periodStart,
+    period_end: periodEnd,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/performance");
+  return { success: true };
+}
+
+export async function sendFeedback(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return { error: "No autenticado" };
+
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id, tenant_id")
+    .eq("auth_uid", authUser.id)
+    .single();
+
+  if (!bizUser) return { error: "Usuario no encontrado" };
+
+  const subjectId = formData.get("subject_id") as string;
+  const content = formData.get("content") as string;
+  const visibility = formData.get("visibility") as string;
+  const category = formData.get("category") as string;
+
+  if (!subjectId || !content) {
+    return { error: "Destinatario y contenido son obligatorios" };
+  }
+
+  const { error } = await supabase.from("continuous_feedbacks").insert({
+    tenant_id: bizUser.tenant_id,
+    author_id: bizUser.id,
+    subject_id: subjectId,
+    content,
+    visibility: visibility || "PRIVATE",
+    category: category || "GENERAL",
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/performance");
+  return { success: true };
+}
