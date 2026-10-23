@@ -16,10 +16,10 @@
       "@/*": [
         "./src/*"
       ],
-      "@talentgo/shared": [
+      "@scaliahr/shared": [
         "../../packages/shared/src"
       ],
-      "@talentgo/shared/*": [
+      "@scaliahr/shared/*": [
         "../../packages/shared/src/*"
       ]
     },

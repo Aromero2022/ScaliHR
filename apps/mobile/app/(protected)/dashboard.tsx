@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from "react-native";
 import { useAuth } from "../../src/providers/auth-provider";
 import { supabase } from "../../src/lib/supabase";
-import type { User } from "@talentgo/shared";
+import type { User } from "@scaliahr/shared";
 import { router } from "expo-router";
 
 export default function DashboardScreen() {

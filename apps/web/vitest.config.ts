@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      "@talentgo/shared": path.resolve(__dirname, "../../packages/shared/src"),
+      "@scaliahr/shared": path.resolve(__dirname, "../../packages/shared/src"),
     },
   },
   test: {

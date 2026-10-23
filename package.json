@@ -1,5 +1,5 @@
 {
-  "name": "talentgo",
+  "name": "scaliahr",
   "version": "1.0.0",
   "private": true,
   "workspaces": [
@@ -10,8 +10,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "dev:web": "turbo dev --filter=@talentgo/web",
-    "dev:mobile": "turbo dev --filter=@talentgo/mobile",
+    "dev:web": "turbo dev --filter=@scaliahr/web",
+    "dev:mobile": "turbo dev --filter=@scaliahr/mobile",
     "db:generate": "turbo db:generate",
     "db:sync": "turbo db:sync",
     "check:forbidden": "bash scripts/check-forbidden.sh"

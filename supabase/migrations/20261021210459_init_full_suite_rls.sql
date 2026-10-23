@@ -1,6 +1,6 @@
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║  MIGRATION: init_full_suite_rls                                     ║
--- ║  Multi-tenant RLS isolation for all TalentGo suite tables           ║
+-- ║  Multi-tenant RLS isolation for all ScaliaHR suite tables           ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 -- ─── HELPER: extract tenant_id from the JWT claim ───────────────────
