@@ -162,14 +162,22 @@ DO $$
 DECLARE
   v_tenant uuid := 'a0000000-0000-0000-0000-000000000001';
 BEGIN
-  -- Elena Martinez (HR admin)
-  INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
-  VALUES ('f0000000-0000-0000-0000-000000000001', v_tenant, 'admin')
-  ON CONFLICT (user_id, tenant_id) DO NOTHING;
+  -- Guard: only seed when the demo tenant and demo auth user exist
+  IF NOT EXISTS (SELECT 1 FROM public.tenants WHERE id = v_tenant) THEN
+    RAISE NOTICE 'Demo tenant not found, skipping membership seed';
+    RETURN;
+  END IF;
 
-  INSERT INTO public.user_settings (user_id, active_tenant_id)
-  VALUES ('f0000000-0000-0000-0000-000000000001', v_tenant)
-  ON CONFLICT (user_id) DO NOTHING;
+  -- Elena Martinez (HR admin) — only if she exists in auth.users
+  IF EXISTS (SELECT 1 FROM auth.users WHERE id = 'f0000000-0000-0000-0000-000000000001') THEN
+    INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
+    VALUES ('f0000000-0000-0000-0000-000000000001', v_tenant, 'admin')
+    ON CONFLICT (user_id, tenant_id) DO NOTHING;
+
+    INSERT INTO public.user_settings (user_id, active_tenant_id)
+    VALUES ('f0000000-0000-0000-0000-000000000001', v_tenant)
+    ON CONFLICT (user_id) DO NOTHING;
+  END IF;
 
   -- Seed memberships for other demo auth users if they exist
   INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
