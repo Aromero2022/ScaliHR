@@ -29,13 +29,14 @@ END $$;
 -- 1. SKILL_ONTOLOGY — replace enum with CHECK, add name uniqueness
 -- ═══════════════════════════════════════════════════════════════════
 
--- Migrate category values before changing column type
+-- Convert enum → text first so UPDATE can use lowercase values
+ALTER TABLE skill_ontology
+  ALTER COLUMN category TYPE text USING category::text;
+
+-- Normalise legacy uppercase enum values to lowercase categories
 UPDATE skill_ontology SET category = 'technical'  WHERE category IN ('TECHNICAL', 'FUNCTIONAL', 'CERTIFICATION');
 UPDATE skill_ontology SET category = 'soft'       WHERE category IN ('LEADERSHIP', 'INTERPERSONAL');
 UPDATE skill_ontology SET category = 'language'   WHERE category = 'LANGUAGE';
-
-ALTER TABLE skill_ontology
-  ALTER COLUMN category TYPE text USING category::text;
 
 ALTER TABLE skill_ontology
   ADD CONSTRAINT skill_ontology_category_chk
@@ -408,12 +409,12 @@ BEGIN
 
   IF v_admin_role_id IS NULL THEN RETURN; END IF;
 
-  INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action) VALUES
-    (v_tenant_id, v_admin_role_id, 'tih.ontology',         'view'),
-    (v_tenant_id, v_admin_role_id, 'tih.ontology',         'edit'),
-    (v_tenant_id, v_admin_role_id, 'tih.job_requirements', 'view'),
-    (v_tenant_id, v_admin_role_id, 'tih.job_requirements', 'edit'),
-    (v_tenant_id, v_admin_role_id, 'tih.employee_skills',  'view'),
-    (v_tenant_id, v_admin_role_id, 'tih.employee_skills',  'edit')
-  ON CONFLICT DO NOTHING;
+  INSERT INTO public.role_permissions (tenant_id, role_id, permission_name) VALUES
+    (v_tenant_id, v_admin_role_id, 'tih.ontology.view'),
+    (v_tenant_id, v_admin_role_id, 'tih.ontology.edit'),
+    (v_tenant_id, v_admin_role_id, 'tih.job_requirements.view'),
+    (v_tenant_id, v_admin_role_id, 'tih.job_requirements.edit'),
+    (v_tenant_id, v_admin_role_id, 'tih.employee_skills.view'),
+    (v_tenant_id, v_admin_role_id, 'tih.employee_skills.edit')
+  ON CONFLICT (role_id, permission_name) DO NOTHING;
 END $$;
