@@ -36,7 +36,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-white">
-            TalentGo
+            Scalia HR
           </h1>
           <p className="mt-2 text-sm text-slate-400">
             Enterprise Human Capital Management

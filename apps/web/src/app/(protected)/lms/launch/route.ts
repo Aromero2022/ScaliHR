@@ -1,16 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import * as moodle from "@/lib/lms/moodle-client";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const origin = request.nextUrl.origin;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:3000"));
+    return NextResponse.redirect(new URL("/login", origin));
   }
 
   const tenantId = (user.app_metadata?.tenant_id as string) ?? null;
@@ -20,10 +21,7 @@ export async function GET() {
 
   const flags = await getModuleFlags(tenantId);
   if (!flags.is_lms_active) {
-    return NextResponse.json(
-      { error: "El módulo LMS no está habilitado para este tenant" },
-      { status: 403 }
-    );
+    return new NextResponse(null, { status: 404 });
   }
 
   const supabaseUuid = user.id;

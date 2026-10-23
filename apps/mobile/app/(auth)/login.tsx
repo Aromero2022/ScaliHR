@@ -41,7 +41,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>TalentGo</Text>
+        <Text style={styles.title}>Scalia HR</Text>
         <Text style={styles.subtitle}>Sign in to your account</Text>
 
         <TextInput
