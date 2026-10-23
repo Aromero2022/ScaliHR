@@ -22,8 +22,8 @@ services:
       supabase-auth:
         condition: service_started
     networks:
-      - talentgo-internal
-      - talentgo-public
+      - scaliahr-internal
+      - scaliahr-public
 
   # ─── SUPABASE: POSTGRESQL ──────────────────────────────────────────
   supabase-db:
@@ -43,7 +43,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - talentgo-internal
+      - scaliahr-internal
 
   # ─── SUPABASE: AUTH (GOTRUE) ───────────────────────────────────────
   supabase-auth:
@@ -65,7 +65,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - talentgo-internal
+      - scaliahr-internal
 
   # ─── SUPABASE: REST (POSTGREST) ────────────────────────────────────
   supabase-rest:
@@ -82,7 +82,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - talentgo-internal
+      - scaliahr-internal
 
   # ─── SUPABASE: API GATEWAY (KONG) ─────────────────────────────────
   supabase-kong:
@@ -101,15 +101,15 @@ services:
       - supabase-auth
       - supabase-rest
     networks:
-      - talentgo-internal
-      - talentgo-public
+      - scaliahr-internal
+      - scaliahr-public
 
 # ─── NETWORKS ──────────────────────────────────────────────────────
 networks:
-  talentgo-internal:
+  scaliahr-internal:
     driver: bridge
     internal: true
-  talentgo-public:
+  scaliahr-public:
     driver: bridge
 
 # ─── VOLUMES ───────────────────────────────────────────────────────

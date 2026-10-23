@@ -4,8 +4,8 @@
     "strict": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@talentgo/shared": ["../../packages/shared/src"],
-      "@talentgo/shared/*": ["../../packages/shared/src/*"]
+      "@scaliahr/shared": ["../../packages/shared/src"],
+      "@scaliahr/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]

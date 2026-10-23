@@ -14,7 +14,7 @@ const cspDirectives = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@talentgo/shared"],
+  transpilePackages: ["@scaliahr/shared"],
 
   async headers() {
     return [

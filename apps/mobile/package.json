@@ -1,5 +1,5 @@
 {
-  "name": "@talentgo/mobile",
+  "name": "@scaliahr/mobile",
   "version": "0.0.1",
   "private": true,
   "main": "expo-router/entry",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
-    "@talentgo/shared": "*",
+    "@scaliahr/shared": "*",
     "expo": "~52.0.0",
     "expo-router": "~4.0.0",
     "expo-secure-store": "~14.0.0",
@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@types/react": "~18.3.0",
+    "eslint": "^8.57.0",
+    "eslint-config-expo": "~8.0.1",
     "typescript": "^5.7.0"
   }
 }

@@ -1,4 +1,4 @@
-import { createSupabaseClient } from "@talentgo/shared/supabase";
+import { createSupabaseClient } from "@scaliahr/shared/supabase";
 import { SecureStoreAdapter } from "./secure-storage";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
