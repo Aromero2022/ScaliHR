@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { adminPrisma } from "@/lib/db/admin-client";
+import { adminPrisma, Prisma } from "@/lib/db/admin-client";
 import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/tenant";
 import { revalidatePath } from "next/cache";
 
@@ -22,7 +22,7 @@ export async function createTenant(input: CreateTenantInput) {
 
   try {
     const result = await adminPrisma.$transaction(async (tx) => {
-      const tenant = await tx.tenants.create({
+      const tenant = await tx.tenant.create({
         data: {
           name,
           slug,
@@ -34,23 +34,20 @@ export async function createTenant(input: CreateTenantInput) {
         },
       });
 
-      await tx.user_tenant_memberships.create({
-        data: {
-          user_id: user.id,
-          tenant_id: tenant.id,
-          app_role: "owner",
-          is_active: true,
-        },
-      });
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
+          VALUES (${user.id}::uuid, ${tenant.id}::uuid, 'owner', true)
+        `
+      );
 
-      await tx.user_settings.upsert({
-        where: { user_id: user.id },
-        update: { active_tenant_id: tenant.id },
-        create: {
-          user_id: user.id,
-          active_tenant_id: tenant.id,
-        },
-      });
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO public.user_settings (user_id, active_tenant_id)
+          VALUES (${user.id}::uuid, ${tenant.id}::uuid)
+          ON CONFLICT (user_id) DO UPDATE SET active_tenant_id = EXCLUDED.active_tenant_id
+        `
+      );
 
       return tenant;
     });

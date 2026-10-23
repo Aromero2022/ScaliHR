@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { can } from "@/lib/authz/can";
 import SkillsHubDashboard from "@/components/skills-hub-dashboard";
 
 interface SkillOntologyRow {
@@ -22,6 +23,14 @@ interface EmployeeSkillRow {
 interface JobRoleSkillRow {
   skill_id: string;
   required_proficiency_level: number;
+  skill: { name: string; code: string; category: string }[] | { name: string; code: string; category: string } | null;
+}
+
+interface DirectReportSkillRow {
+  user_id: string;
+  skill_id: string;
+  self_assessed_level: number;
+  manager_assessed_level: number | null;
   skill: { name: string; code: string; category: string }[] | { name: string; code: string; category: string } | null;
 }
 
@@ -61,6 +70,9 @@ export default async function SkillsHubPage() {
       jobRoleId = jc?.job_role_id ?? null;
     }
   }
+
+  const canViewTeam = await can(bizUser.id, "tih.employee_skills", "view", "check-any");
+  const isManager = canViewTeam.allowed;
 
   const [ontologyRes, mySkillsRes, roleSkillsRes] = await Promise.all([
     supabase
@@ -119,6 +131,68 @@ export default async function SkillsHubPage() {
     };
   });
 
+  type TeamMember = {
+    user_id: string;
+    full_name: string;
+    skills: {
+      skill_id: string;
+      skill_name: string;
+      skill_category: string;
+      self_assessed_level: number;
+      manager_assessed_level: number | null;
+    }[];
+  };
+  let teamMembers: TeamMember[] = [];
+
+  if (isManager) {
+    const { data: directReports } = await supabase.rpc("get_direct_reports", {});
+    const reportIds: string[] = (directReports ?? []).map(
+      (r: { user_id: string }) => r.user_id
+    );
+
+    if (reportIds.length > 0) {
+      const { data: reportUsers } = await supabase
+        .from("users")
+        .select("id, first_name, last_name")
+        .in("id", reportIds);
+
+      const { data: reportSkills } = await supabase
+        .from("employee_skills")
+        .select(
+          "user_id, skill_id, self_assessed_level, manager_assessed_level, skill:skill_ontology!es_skill_fk(name, code, category)"
+        )
+        .in("user_id", reportIds);
+
+      const userMap = new Map(
+        (reportUsers ?? []).map((u: { id: string; first_name: string | null; last_name: string | null }) => [
+          u.id,
+          `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() || "Sin nombre",
+        ])
+      );
+
+      const skillsByUser = new Map<string, TeamMember["skills"]>();
+      for (const es of (reportSkills ?? []) as unknown[]) {
+        const row = es as DirectReportSkillRow;
+        const skill = Array.isArray(row.skill) ? row.skill[0] : row.skill;
+        const list = skillsByUser.get(row.user_id) ?? [];
+        list.push({
+          skill_id: row.skill_id,
+          skill_name: skill?.name ?? "",
+          skill_category: skill?.category ?? "",
+          self_assessed_level: row.self_assessed_level,
+          manager_assessed_level: row.manager_assessed_level,
+        });
+        skillsByUser.set(row.user_id, list);
+      }
+
+      teamMembers = reportIds.map((uid) => ({
+        user_id: uid,
+        full_name: userMap.get(uid) ?? "Sin nombre",
+        skills: skillsByUser.get(uid) ?? [],
+      }));
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -131,6 +205,8 @@ export default async function SkillsHubPage() {
         ontology={ontology}
         mySkills={mySkills}
         roleSkills={roleSkills}
+        teamMembers={teamMembers}
+        isManager={isManager}
       />
     </div>
   );

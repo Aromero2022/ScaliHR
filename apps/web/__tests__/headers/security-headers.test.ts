@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import nextConfig from "../../next.config";
 
 type HeaderEntry = { key: string; value: string };

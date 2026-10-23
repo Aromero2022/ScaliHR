@@ -73,37 +73,12 @@ export async function updateSelfAssessment(
   const perm = await can(bizUser.id, "tih.employee_skills", "edit");
   if (!perm.allowed) return { error: "Sin permiso para evaluar habilidades" };
 
-  const { data: existing } = await supabase
-    .from("employee_skills")
-    .select("self_assessed_level")
-    .eq("tenant_id", bizUser.tenant_id)
-    .eq("user_id", bizUser.id)
-    .eq("skill_id", skillId)
-    .maybeSingle();
-
-  const oldLevel = existing?.self_assessed_level ?? null;
-
-  const { error } = await supabase.from("employee_skills").upsert(
-    {
-      tenant_id: bizUser.tenant_id,
-      user_id: bizUser.id,
-      skill_id: skillId,
-      self_assessed_level: level,
-      self_assessed_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id,user_id,skill_id" }
-  );
+  const { error } = await supabase.rpc("upsert_self_assessment", {
+    p_skill_id: skillId,
+    p_level: level,
+  });
 
   if (error) return { error: error.message };
-
-  await writeAuditLog({
-    tenantId: bizUser.tenant_id,
-    actorId: bizUser.id,
-    action: "tih.self_assessment",
-    entity: "employee_skills",
-    entityId: `${bizUser.id}:${skillId}`,
-    diff: { old_level: oldLevel, new_level: level },
-  });
 
   revalidatePath("/skills-hub");
   return { success: true };

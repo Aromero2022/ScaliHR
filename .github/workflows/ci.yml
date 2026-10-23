@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, fix/estabilizacion-e1]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Lint · Types · Tests · Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Build
+        run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+
+  db:
+    name: Database migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
+
+      - name: Validate migrations (db reset)
+        run: supabase db reset
+
+      - name: Run integration tests
+        run: |
+          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
+          cd apps/web
+          npx vitest run __tests__/tih-rls-integration.test.ts __tests__/rls-isolation.test.ts
+        env:
+          NODE_ENV: test

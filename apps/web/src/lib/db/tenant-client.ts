@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -37,4 +37,4 @@ export async function withTenant<T>(
   });
 }
 
-export { prisma };
+export { prisma, Prisma };
