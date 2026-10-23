@@ -6,12 +6,13 @@
 -- holds an admin role within their tenant.
 CREATE OR REPLACE FUNCTION is_tenant_admin()
 RETURNS boolean
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT EXISTS (
+BEGIN
+  RETURN EXISTS (
     SELECT 1
     FROM role_assignments ra
     JOIN permission_roles pr ON pr.id = ra.role_id
@@ -20,14 +21,13 @@ AS $$
       AND pr.tenant_id = requesting_tenant_id()
       AND pg.tenant_id = requesting_tenant_id()
       AND ra.tenant_id = requesting_tenant_id()
-      -- The granted group contains a criteria that matches the current user
-      -- For MVP: check if the user's auth_uid is in the users table for this tenant
       AND EXISTS (
         SELECT 1 FROM users u
         WHERE u.auth_uid = auth.uid()
           AND u.tenant_id = requesting_tenant_id()
       )
   );
+END;
 $$;
 
 -- ─── PERMISSION GROUPS ────────────────────────────────────────────
