@@ -105,10 +105,19 @@ END $$;
 -- ═══════════════════════════════════════════════════════════════════
 
 -- rls_auto_enable: SECURITY DEFINER, only service_role
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon;
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
-GRANT  EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+-- Guard: function may not exist on a fresh db reset
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'rls_auto_enable'
+  ) THEN
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon;
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
+    GRANT  EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+  END IF;
+END $$;
 
 -- requesting_tenant_id: keep for backward compat, same lockdown as current_tenant_id
 REVOKE EXECUTE ON FUNCTION public.requesting_tenant_id() FROM PUBLIC;
