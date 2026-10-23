@@ -8,6 +8,7 @@ set -euo pipefail
 FORBIDDEN_PATTERNS=(
   "service_role"
   "bitnami"
+  "MOODLE_WS_TOKEN"
 )
 
 SEARCH_DIRS=(
@@ -19,6 +20,13 @@ EXCLUDE_DIRS=(
   "node_modules"
   ".next"
   "dist"
+)
+
+# Server-only files that legitimately reference secrets
+ALLOWLIST=(
+  "lib/lms/moodle-client.ts"
+  "lib/lms/provision-tenant.ts"
+  "lib/jobs/lms-sync.ts"
 )
 
 EXIT_CODE=0
@@ -37,9 +45,26 @@ for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
       "$pattern" "$dir" 2>/dev/null || true)
 
     if [ -n "$MATCHES" ]; then
-      echo "FORBIDDEN: Found '$pattern' in client code:"
-      echo "$MATCHES"
-      EXIT_CODE=1
+      FILTERED=""
+      while IFS= read -r line; do
+        SKIP=false
+        for allowed in "${ALLOWLIST[@]}"; do
+          if [[ "$line" == *"$allowed"* ]]; then
+            SKIP=true
+            break
+          fi
+        done
+        if [ "$SKIP" = false ]; then
+          FILTERED+="$line"$'\n'
+        fi
+      done <<< "$MATCHES"
+
+      FILTERED=$(echo -n "$FILTERED" | sed '/^$/d')
+      if [ -n "$FILTERED" ]; then
+        echo "FORBIDDEN: Found '$pattern' in client code:"
+        echo "$FILTERED"
+        EXIT_CODE=1
+      fi
     fi
   done
 done

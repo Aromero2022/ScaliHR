@@ -13,14 +13,13 @@ services:
       NEXT_PUBLIC_SUPABASE_URL: http://supabase-kong:8000
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      MOODLE_BASE_URL: http://moodle:8080
+      MOODLE_BASE_URL: ${MOODLE_BASE_URL:-http://host.docker.internal:8080}
+      MOODLE_WS_TOKEN: ${MOODLE_WS_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     depends_on:
       supabase-db:
         condition: service_healthy
       supabase-auth:
-        condition: service_started
-      moodle:
         condition: service_started
     networks:
       - talentgo-internal
@@ -105,52 +104,6 @@ services:
       - talentgo-internal
       - talentgo-public
 
-  # ─── MOODLE LMS ───────────────────────────────────────────────────
-  moodle:
-    image: bitnami/moodle:4.5
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-    environment:
-      MOODLE_DATABASE_HOST: moodle-db
-      MOODLE_DATABASE_PORT_NUMBER: 3306
-      MOODLE_DATABASE_USER: moodle
-      MOODLE_DATABASE_PASSWORD: ${MOODLE_DB_PASSWORD:-moodle_secure_pass}
-      MOODLE_DATABASE_NAME: moodle
-      MOODLE_USERNAME: admin
-      MOODLE_PASSWORD: ${MOODLE_ADMIN_PASSWORD:-Admin1234!}
-      MOODLE_SITE_NAME: TalentGo LMS
-      MOODLE_SSLPROXY: "no"
-    volumes:
-      - moodle-data:/bitnami/moodle
-      - moodle-moodledata:/bitnami/moodledata
-    depends_on:
-      moodle-db:
-        condition: service_healthy
-    networks:
-      - talentgo-internal
-      - talentgo-public
-
-  # ─── MOODLE: MARIADB ──────────────────────────────────────────────
-  moodle-db:
-    image: mariadb:11.4
-    ports:
-      - "3307:3306"
-    environment:
-      MARIADB_ROOT_PASSWORD: ${MOODLE_DB_ROOT_PASSWORD:-root_secure_pass}
-      MARIADB_DATABASE: moodle
-      MARIADB_USER: moodle
-      MARIADB_PASSWORD: ${MOODLE_DB_PASSWORD:-moodle_secure_pass}
-    volumes:
-      - moodle-db-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - talentgo-internal
-
 # ─── NETWORKS ──────────────────────────────────────────────────────
 networks:
   talentgo-internal:
@@ -162,6 +115,3 @@ networks:
 # ─── VOLUMES ───────────────────────────────────────────────────────
 volumes:
   supabase-db-data:
-  moodle-data:
-  moodle-moodledata:
-  moodle-db-data:

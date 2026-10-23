@@ -4,19 +4,32 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { clsx } from "clsx";
+import type { ModuleFlags } from "@/lib/tenant/get-module-flags";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ active: boolean }>;
+  moduleFlag?: keyof ModuleFlags;
+};
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Inicio (BizX)", icon: HomeIcon },
-  { href: "/employees", label: "Empleados (EC)", icon: EmployeesIcon },
+  { href: "/employees", label: "Empleados (EC)", icon: EmployeesIcon, moduleFlag: "is_ec_active" },
   { href: "/profile", label: "Mi Perfil", icon: UserIcon },
-  { href: "/org-chart", label: "Organigrama (EC)", icon: OrgIcon },
-  { href: "/performance", label: "Desempeño (PMGM)", icon: PerformanceIcon },
-  { href: "/skills-hub", label: "Talent Hub (TIH)", icon: SkillsIcon },
+  { href: "/org-chart", label: "Organigrama (EC)", icon: OrgIcon, moduleFlag: "is_ec_active" },
+  { href: "/performance", label: "Desempeño (PMGM)", icon: PerformanceIcon, moduleFlag: "is_pmgm_active" },
+  { href: "/lms", label: "Formación (LMS)", icon: LmsIcon, moduleFlag: "is_lms_active" },
+  { href: "/skills-hub", label: "Talent Hub (TIH)", icon: SkillsIcon, moduleFlag: "is_tih_active" },
   { href: "/admin/arco", label: "Derechos ARCO", icon: ShieldIcon },
   { href: "/admin-center", label: "Admin Center", icon: AdminIcon },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  moduleFlags,
+}: {
+  moduleFlags: ModuleFlags | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -27,17 +40,23 @@ export default function Sidebar() {
     router.refresh();
   }
 
+  const visibleItems = navItems.filter((item) => {
+    if (!item.moduleFlag) return true;
+    if (!moduleFlags) return false;
+    return moduleFlags[item.moduleFlag];
+  });
+
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
       <div className="flex h-16 items-center gap-2 border-b border-slate-800 px-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-          T
+          S
         </div>
-        <span className="text-lg font-bold text-white">TalentGo</span>
+        <span className="text-lg font-bold text-white">Scalia HR</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
@@ -178,6 +197,24 @@ function PerformanceIcon({ active }: { active: boolean }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
+      />
+    </svg>
+  );
+}
+
+function LmsIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.26 10.147a60.438 60.438 0 00-.491 6.347A48.62 48.62 0 0112 20.904a48.62 48.62 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.636 50.636 0 00-2.658-.813A59.906 59.906 0 0112 3.493a59.903 59.903 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15v-3.75m0 0h-.008v.008H6.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
       />
     </svg>
   );
