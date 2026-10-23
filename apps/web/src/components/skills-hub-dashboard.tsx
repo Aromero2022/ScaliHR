@@ -14,21 +14,17 @@ interface OntologySkill {
 }
 
 interface MySkill {
-  id: string;
   skill_id: string;
   self_assessed_level: number;
   manager_assessed_level: number | null;
-  verified: boolean;
   skill_name: string;
   skill_code: string;
   skill_category: string;
 }
 
 interface RoleSkill {
-  id: string;
   skill_id: string;
   required_level: number;
-  importance: string;
   skill_name: string;
   skill_code: string;
   skill_category: string;
@@ -41,26 +37,16 @@ interface Props {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  TECHNICAL: { label: "Técnica", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
-  LEADERSHIP: { label: "Liderazgo", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-  FUNCTIONAL: { label: "Funcional", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-  INTERPERSONAL: { label: "Interpersonal", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" },
-  LANGUAGE: { label: "Idioma", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20" },
-  CERTIFICATION: { label: "Certificación", color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20" },
+  technical: { label: "Técnica", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+  soft: { label: "Interpersonal", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" },
+  language: { label: "Idioma", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20" },
 };
 
-const IMPORTANCE_CONFIG: Record<string, { label: string; color: string }> = {
-  CRITICAL: { label: "Crítica", color: "text-red-400" },
-  REQUIRED: { label: "Requerida", color: "text-amber-400" },
-  PREFERRED: { label: "Preferida", color: "text-blue-400" },
-  NICE_TO_HAVE: { label: "Deseable", color: "text-slate-400" },
-};
 
 export default function SkillsHubDashboard({ ontology, mySkills, roleSkills }: Props) {
   const [activeTab, setActiveTab] = useState<"radar" | "catalog">("radar");
 
   const assessedCount = mySkills.length;
-  const verifiedCount = mySkills.filter((s) => s.verified).length;
   const gapCount = roleSkills.filter(
     (rs) => {
       const mine = mySkills.find((ms) => ms.skill_id === rs.skill_id);
@@ -75,9 +61,8 @@ export default function SkillsHubDashboard({ ontology, mySkills, roleSkills }: P
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-4">
         <StatTile label="Habilidades Evaluadas" value={assessedCount} />
-        <StatTile label="Verificadas" value={verifiedCount} accent="emerald" />
         <StatTile label="Brechas Detectadas" value={gapCount} accent="amber" />
         <StatTile label="Nivel Promedio" value={avgLevel} accent="indigo" />
       </div>
@@ -121,13 +106,11 @@ function StatTile({
   accent?: string;
 }) {
   const ring =
-    accent === "emerald"
-      ? "border-emerald-500/30"
-      : accent === "amber"
-        ? "border-amber-500/30"
-        : accent === "indigo"
-          ? "border-indigo-500/30"
-          : "border-slate-700";
+    accent === "amber"
+      ? "border-amber-500/30"
+      : accent === "indigo"
+        ? "border-indigo-500/30"
+        : "border-slate-700";
   return (
     <div className={clsx("rounded-xl border bg-slate-900 p-4", ring)}>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
@@ -148,10 +131,8 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
       skill_name: rs.skill_name,
       skill_category: rs.skill_category,
       required_level: rs.required_level,
-      importance: rs.importance,
       self_level: mine?.self_assessed_level ?? 0,
       manager_level: mine?.manager_assessed_level ?? null,
-      verified: mine?.verified ?? false,
       has_assessment: !!mine,
     };
   });
@@ -189,16 +170,8 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
                 <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{item.skill_name}</span>
-                    <span
-                      className={clsx(
-                        "text-xs",
-                        IMPORTANCE_CONFIG[item.importance]?.color ?? "text-slate-400"
-                      )}
-                    >
-                      {IMPORTANCE_CONFIG[item.importance]?.label ?? item.importance}
-                    </span>
-                    {item.verified && (
-                      <span className="text-xs text-emerald-400">✓</span>
+                    {item.manager_level !== null && (
+                      <span className="text-xs text-emerald-400">✓ Manager</span>
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
@@ -270,7 +243,7 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
           <div className="grid gap-3 sm:grid-cols-2">
             {unmatched.map((ms) => (
               <div
-                key={ms.id}
+                key={ms.skill_id}
                 className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3"
               >
                 <div>
@@ -321,8 +294,8 @@ function LevelSelector({
   function handleSelect(level: number) {
     setError(null);
     startTransition(async () => {
-      const result = await updateSelfAssessment(skillId, level);
-      if (result.error) {
+      const result = await updateSelfAssessment({ skillId, level });
+      if ("error" in result) {
         setError(result.error);
       } else {
         onDone();
