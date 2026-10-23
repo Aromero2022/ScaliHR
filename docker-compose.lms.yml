@@ -1,0 +1,60 @@
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Moodle LMS — standalone compose for the Scalia HR LMS bridge   ║
+# ║  Image: moodlehq/moodle-php-apache (LTS) + PostgreSQL 16       ║
+# ║  Run:   docker compose -f docker-compose.lms.yml up -d          ║
+# ║  Init:  scripts/moodle-bootstrap.sh                              ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+
+services:
+  # ─── Moodle Application ─────────────────────────────────────────
+  moodle:
+    image: moodlehq/moodle-php-apache:8.3
+    container_name: scalia-moodle
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      MOODLE_DOCKER_DBTYPE: pgsql
+      MOODLE_DOCKER_DBHOST: moodle-pg
+      MOODLE_DOCKER_DBNAME: moodle
+      MOODLE_DOCKER_DBUSER: moodle
+      MOODLE_DOCKER_DBPASS: ${MOODLE_DB_PASSWORD:-moodle_dev_pass}
+      MOODLE_DOCKER_WEB_HOST: localhost
+      MOODLE_DOCKER_WEB_PORT: 8080
+    volumes:
+      - moodle-app:/var/www/html
+      - moodle-data:/var/www/moodledata
+    depends_on:
+      moodle-pg:
+        condition: service_healthy
+    networks:
+      - scalia-internal
+    restart: unless-stopped
+
+  # ─── PostgreSQL for Moodle ──────────────────────────────────────
+  moodle-pg:
+    image: postgres:16-alpine
+    container_name: scalia-moodle-pg
+    environment:
+      POSTGRES_DB: moodle
+      POSTGRES_USER: moodle
+      POSTGRES_PASSWORD: ${MOODLE_DB_PASSWORD:-moodle_dev_pass}
+    volumes:
+      - moodle-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moodle -d moodle"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scalia-internal
+    restart: unless-stopped
+
+networks:
+  scalia-internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  moodle-app:
+  moodle-data:
+  moodle-pg-data:
