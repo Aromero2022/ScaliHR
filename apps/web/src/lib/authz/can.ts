@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db/tenant-client";
+import { prisma, Prisma } from "@/lib/db/tenant-client";
 
 type RbpAction = "view" | "edit";
 
@@ -46,6 +45,53 @@ export function clearCanCache() {
   requestCache.clear();
 }
 
+type MatchingAssignment = {
+  role_id: string;
+  target_criteria: Record<string, unknown> | null;
+};
+
+async function findUserAssignments(
+  userId: string
+): Promise<MatchingAssignment[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { tenant_id: true },
+  });
+  if (!user) return [];
+
+  const allAssignments = await prisma.roleAssignment.findMany({
+    where: { tenant_id: user.tenant_id },
+    select: {
+      role_id: true,
+      granted_group: { select: { criteria_json: true } },
+      target_population: { select: { criteria_json: true } },
+    },
+  });
+
+  return allAssignments
+    .filter((a) => {
+      const criteria = a.granted_group?.criteria_json as
+        | Record<string, unknown>
+        | null;
+      if (!criteria) return false;
+      const type = criteria.type as string | undefined;
+      if (type === "all") return true;
+      if (type === "self") return true;
+      if (type === "direct_reports") return true;
+      if (type === "user_ids") {
+        const ids = criteria.user_ids as string[] | undefined;
+        return ids?.includes(userId) ?? false;
+      }
+      return false;
+    })
+    .map((a) => ({
+      role_id: a.role_id,
+      target_criteria: a.target_population?.criteria_json as
+        | Record<string, unknown>
+        | null,
+    }));
+}
+
 async function evaluate(
   userId: string,
   permissionKey: string,
@@ -53,22 +99,7 @@ async function evaluate(
   targetUserId?: string,
   _fieldKey?: string
 ): Promise<CanResult> {
-  const assignments = await prisma.roleAssignment.findMany({
-    where: {
-      granted_group: {
-        criteria_json: {
-          path: ["user_ids"],
-          array_contains: userId,
-        },
-      },
-    },
-    select: {
-      role_id: true,
-      target_population: {
-        select: { criteria_json: true },
-      },
-    },
-  });
+  const assignments = await findUserAssignments(userId);
 
   if (assignments.length === 0) {
     return { allowed: false, reason: "no_group_membership" };
@@ -100,11 +131,8 @@ async function evaluate(
   for (const assignment of assignments) {
     if (!permittedRoleIds.has(assignment.role_id)) continue;
 
-    const criteria = assignment.target_population?.criteria_json as
-      | Record<string, unknown>
-      | null;
     const populationType =
-      (criteria?.type as string | undefined) ?? "all";
+      (assignment.target_criteria?.type as string | undefined) ?? "all";
 
     switch (populationType) {
       case "all":

@@ -1,8 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { adminPrisma } from "@/lib/db/admin-client";
-import { Prisma } from "@prisma/client";
+import { adminPrisma, Prisma } from "@/lib/db/admin-client";
 import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/tenant";
 import { revalidatePath } from "next/cache";
 
