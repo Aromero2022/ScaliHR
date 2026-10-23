@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -73,7 +74,7 @@ export default function MfaEnrollPage() {
 
       {qrCode && (
         <div className="flex justify-center rounded-xl border border-slate-800 bg-white p-6">
-          <img src={qrCode} alt="QR Code" width={200} height={200} />
+          <Image src={qrCode} alt="QR Code" width={200} height={200} unoptimized />
         </div>
       )}
 
